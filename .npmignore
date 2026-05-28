@@ -1,0 +1,32 @@
+# Source files (publish dist/ only)
+src/
+tsconfig.json
+*.test.ts
+
+# Development
+.idea/
+.vscode/
+.omo/
+.gitnexus/
+.claude/
+AGENTS.md
+CLAUDE.md
+
+# Config examples with secrets
+opencode.jsonc.example
+
+# OpenCode desktop files
+/index.js
+/sidecar.js
+/loading.html
+
+# OS
+.DS_Store
+dist/**/.DS_Store
+
+# Pack artifacts
+*.tgz
+
+# Git
+.git/
+.gitignore

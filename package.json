@@ -1,0 +1,43 @@
+{
+  "name": "@openstellar/mcp-adapter",
+  "version": "0.1.0",
+  "description": "OpenCode plugin that improves MCP compatibility with Gemini and enables tool hook interception",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "license": "MIT",
+  "author": "OpenStellar",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Chewji9875/openstellar-mcp-adapter.git"
+  },
+  "keywords": [
+    "opencode",
+    "mcp",
+    "model-context-protocol",
+    "gemini",
+    "plugin"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc",
+    "prepack": "npm run build",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@opencode-ai/plugin": "^1.15.11"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.15.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

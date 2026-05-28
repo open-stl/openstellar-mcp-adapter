@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+*.tgz
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# OS
+.DS_Store
+
+# Testing
+coverage/
+
+# IDE
+.idea/
+.vscode/
+
+# OpenCode runtime
+.omo/
+
+# GitNexus
+.gitnexus/
+AGENTS.md
+CLAUDE.md
+.claude/
+
+# Config examples with secrets
+opencode.jsonc.example
+
+# OpenCode desktop files (not part of adapter)
+/index.js
+/sidecar.js
+/loading.html
