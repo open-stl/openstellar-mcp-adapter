@@ -1,10 +1,14 @@
 import type { BaseServerConfig } from '../types/config.js';
+import type { ServerConnection } from '../types/connection.js';
 import type { Transport } from './transport-factory.js';
 
-export interface CacheEntry {
-    promise: Promise<Record<string, unknown>>;
-    transports: Transport[];
+export interface ServerCacheEntry {
+    tools: Record<string, any>;
+    transport: Transport;
+    client: ServerConnection['client'];
 }
+
+export type ServerConnectionFactory = () => Promise<ServerCacheEntry>;
 
 function stableStringify(obj: unknown): string {
     if (obj === null || obj === undefined) return String(obj);
@@ -30,51 +34,106 @@ function serializeServerConfig(server: BaseServerConfig): string {
 }
 
 export class AdapterCache {
-    private cache = new Map<string, CacheEntry>();
+    private cache = new Map<string, ServerCacheEntry>();
+    private inFlight = new Map<string, Promise<ServerCacheEntry>>();
 
-    getCacheKey(servers: BaseServerConfig[]): string {
-        const sorted = [...servers].sort((a, b) => a.name.localeCompare(b.name));
-        return `[${sorted.map(serializeServerConfig).join(',')}]`;
+    getServerKey(server: BaseServerConfig): string {
+        return serializeServerConfig(server);
     }
 
-    get(key: string): CacheEntry | undefined {
+    get(key: string): ServerCacheEntry | undefined {
         return this.cache.get(key);
     }
 
-    set(key: string, entry: CacheEntry): void {
+    set(key: string, entry: ServerCacheEntry): void {
         this.cache.set(key, entry);
     }
 
+    async getReady(key: string): Promise<ServerCacheEntry | undefined> {
+        const cached = this.cache.get(key);
+        if (!cached) return undefined;
+
+        if (await this.isAlive(cached)) {
+            return cached;
+        }
+
+        this.cache.delete(key);
+        await this.closeTransport(cached.transport);
+        return undefined;
+    }
+
+    async getOrCreate(key: string, create: ServerConnectionFactory): Promise<ServerCacheEntry> {
+        const ready = await this.getReady(key);
+        if (ready) return ready;
+
+        const existing = this.inFlight.get(key);
+        if (existing) return existing;
+
+        const promise = (async () => {
+            try {
+                const entry = await create();
+                this.cache.set(key, entry);
+                return entry;
+            } catch (error) {
+                const entry = this.cache.get(key);
+                if (entry) {
+                    this.cache.delete(key);
+                    await this.closeTransport(entry.transport);
+                }
+                throw error;
+            } finally {
+                this.inFlight.delete(key);
+            }
+        })();
+
+        this.inFlight.set(key, promise);
+        return promise;
+    }
+
     async delete(key: string): Promise<void> {
+        this.inFlight.delete(key);
         const entry = this.cache.get(key);
         if (entry) {
-            await this.closeTransports(entry.transports);
             this.cache.delete(key);
+            await this.closeTransport(entry.transport);
         }
     }
 
-    clear(): void {
+    async clear(): Promise<void> {
+        const entries = Array.from(this.cache.values());
         this.cache.clear();
+        this.inFlight.clear();
+        await Promise.all(
+            entries.map(async (entry) => {
+                await this.closeTransport(entry.transport);
+            })
+        );
     }
 
     async closeAllTransports(): Promise<void> {
-        const allTransports: Transport[] = [];
-        for (const entry of this.cache.values()) {
-            allTransports.push(...entry.transports);
-        }
-        await this.closeTransports(allTransports);
-    }
-
-    private async closeTransports(transports: Transport[]): Promise<void> {
+        const entries = Array.from(this.cache.values());
         await Promise.all(
-            transports.map(async (transport) => {
-                try {
-                    await Promise.resolve(transport.close());
-                } catch {
-                    // best-effort cleanup
-                }
+            entries.map(async (entry) => {
+                await this.closeTransport(entry.transport);
             })
         );
+    }
+
+    private async closeTransport(transport: Transport): Promise<void> {
+        try {
+            await Promise.resolve(transport.close());
+        } catch {
+            // best-effort cleanup
+        }
+    }
+
+    private async isAlive(entry: ServerCacheEntry): Promise<boolean> {
+        try {
+            await entry.client.listTools();
+            return true;
+        } catch {
+            return false;
+        }
     }
 }
 
