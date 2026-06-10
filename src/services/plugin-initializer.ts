@@ -81,9 +81,40 @@ export class PluginInitializer {
             const toolsResult = await connection.client.listTools();
 
             const serverTools: Record<string, ReturnType<typeof tool>> = {};
+
+            /**
+             * Builds a deduplicated tool name: strips leading tokens from the MCP tool
+             * name that already appear as server name tokens, preventing double prefixes
+             * like `notion_notion_search` or `pieces_pieces_tag_snapshot`.
+             *
+             * Falls back to the raw `<server>_<tool>` form if stripping would produce
+             * a name that collides with an already-registered tool from the same server.
+             */
+            function buildToolName(serverName: string, mcpToolName: string): string {
+                const serverNorm = serverName.replace(/-/g, '_');
+                const raw = mcpToolName.replace(/-/g, '_');
+                const serverParts = serverNorm.split('_');
+                const toolParts = raw.split('_');
+
+                let trim = 0;
+                for (const part of serverParts) {
+                    if (trim < toolParts.length && toolParts[trim] === part) trim++;
+                    else break;
+                }
+
+                const stripped = toolParts.slice(trim).join('_');
+                const deduped = stripped ? `${serverNorm}_${stripped}` : serverNorm;
+
+                // Collision guard: if the deduped name is already taken, fall back to raw
+                if (serverTools[deduped]) {
+                    return `${serverNorm}_${raw}`;
+                }
+                return deduped;
+            }
+
             for (const mcpTool of toolsResult.tools) {
-                const toolName = `${server.name}_${mcpTool.name}`.replace(/-/g, '_');
-                serverTools[toolName] = convertMcpTool(mcpTool, connection.client);
+                const toolName = buildToolName(server.name, mcpTool.name);
+                serverTools[toolName] = convertMcpTool(mcpTool, connection.client, server.timeout);
             }
 
             log(`[${server.name}] Successfully registered ${toolsResult.tools.length} tools`);
