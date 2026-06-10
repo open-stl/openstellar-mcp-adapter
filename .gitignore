@@ -34,6 +34,7 @@ CLAUDE.md
 
 # Config examples with secrets
 opencode.jsonc.example
+opencode.local.jsonc
 
 # OpenCode desktop files (not part of adapter)
 /index.js
