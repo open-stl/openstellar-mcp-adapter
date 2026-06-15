@@ -83,9 +83,10 @@ export class PluginInitializer {
             const serverTools: Record<string, ReturnType<typeof tool>> = {};
 
             /**
-             * Builds a deduplicated tool name: strips leading tokens from the MCP tool
-             * name that already appear as server name tokens, preventing double prefixes
-             * like `notion_notion_search` or `pieces_pieces_tag_snapshot`.
+             * Builds a deduplicated tool name: strips ALL tokens from the MCP tool
+             * name that appear in the server name, regardless of position — preventing
+             * double prefixes like `notion_notion_search`, suffixes like
+             * `exa_web_fetch_exa`, and mid-name repeats.
              *
              * Falls back to the raw `<server>_<tool>` form if stripping would produce
              * a name that collides with an already-registered tool from the same server.
@@ -93,16 +94,11 @@ export class PluginInitializer {
             function buildToolName(serverName: string, mcpToolName: string): string {
                 const serverNorm = serverName.replace(/-/g, '_');
                 const raw = mcpToolName.replace(/-/g, '_');
-                const serverParts = serverNorm.split('_');
+                const serverParts = new Set(serverNorm.split('_'));
                 const toolParts = raw.split('_');
 
-                let trim = 0;
-                for (const part of serverParts) {
-                    if (trim < toolParts.length && toolParts[trim] === part) trim++;
-                    else break;
-                }
-
-                const stripped = toolParts.slice(trim).join('_');
+                const filtered = toolParts.filter((part) => !serverParts.has(part));
+                const stripped = filtered.join('_');
                 const deduped = stripped ? `${serverNorm}_${stripped}` : serverNorm;
 
                 // Collision guard: if the deduped name is already taken, fall back to raw
