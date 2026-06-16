@@ -187,10 +187,13 @@ describe('jsonSchemaToZod - $ref handling', () => {
     expect(() => jsonSchemaToZod({ $ref: '#/definitions/Foo' })).not.toThrow();
   });
 
-  it('logs warning for $ref schemas', () => {
+  it('logs $ref fallback to console.debug (not warn)', () => {
+    // $ref fallback to z.string() is a normal recovery path, not a warning-worthy
+    // condition. It should be silent in production logs unless the user opts in to
+    // debug logging. We verify the function does NOT call console.warn.
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     jsonSchemaToZod({ $ref: '#/definitions/Foo' });
-    expect(warnSpy).toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 });
