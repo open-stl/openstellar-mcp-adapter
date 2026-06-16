@@ -1,6 +1,6 @@
 {
   "name": "@openstellar/mcp-adapter",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "OpenCode plugin that improves MCP compatibility with Gemini and enables tool hook interception",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,7 +20,7 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npm run clean && tsc --emitDeclarationOnly && rollup -c rollup.dts.config.mjs && node scripts/prune-dist-declarations.mjs && esbuild src/index.ts --bundle --packages=external --platform=node --target=node18 --format=esm --outfile=dist/index.js",
+    "build": "npm run clean && tsc --emitDeclarationOnly && rollup -c rollup.dts.config.mjs && node scripts/prune-dist-declarations.mjs && esbuild src/index.ts --bundle --packages=external --platform=node --target=node18 --format=esm --outfile=dist/index.js --define:PACKAGE_VERSION=\"\\\"$npm_package_version\\\"\"",
     "prepack": "npm run build",
     "smoke:plugin": "node scripts/smoke-plugin-load.mjs",
     "test": "vitest run"

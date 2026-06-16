@@ -30,11 +30,10 @@ export function jsonSchemaToZod(schema: unknown): any {
         return isNullable ? union.nullable() : union;
     }
 
-    // Handle $ref — fallback to string. This is a graceful recovery, not a
-    // user-facing error. Demoted to console.debug so the user's terminal
-    // doesn't get spammed when an MCP server uses $ref in its tool schemas.
+    // Handle $ref — MCP servers send individual tool schemas that reference
+    // external definitions ($defs / definitions) which we don't have access to.
+    // Instead of crashing, fall back to string to keep things working.
     if (s.$ref && typeof s.$ref === 'string') {
-        console.debug?.(`jsonSchemaToZod: $ref not resolved (${s.$ref}), falling back to string`);
         return zObj.string();
     }
 
