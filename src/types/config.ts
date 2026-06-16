@@ -21,8 +21,8 @@ export interface RemoteMcpServerConfig extends BaseServerConfig {
 export type McpServerConfig = LocalMcpServerConfig | RemoteMcpServerConfig;
 
 export type McpConfigEntry =
-    | Omit<LocalMcpServerConfig, 'name'>
-    | Omit<RemoteMcpServerConfig, 'name'>;
+    | (Omit<LocalMcpServerConfig, 'name'> & { enabled?: boolean })
+    | (Omit<RemoteMcpServerConfig, 'name'> & { enabled?: boolean });
 
 export interface McpAdapterOptions extends PluginOptions {
     mcp?: Record<string, McpConfigEntry>;
