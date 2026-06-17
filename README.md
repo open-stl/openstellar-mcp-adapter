@@ -22,6 +22,7 @@ response flattening, timeouts, and error messages automatically.
 | **Timeout guard**       | 60s timeout, resets on server progress                                                  | No frozen conversations. Long-running tools still work.            |
 | **Clean errors**        | `"Tool X on server Y failed: reason"` instead of stack traces                           | The LLM tells you what happened instead of throwing noise.         |
 | **Smart naming**        | `notion` + `notion_search` → `notion_search`, not `notion_notion_search`                | Clean tool names. No repetition.                                   |
+| **Auto-update**         | Checks npm registry on first session, invalidates stale cache, notifies you by toast    | Always runs the latest version. No manual cleanup.                |
 
 
 ---
