@@ -1,0 +1,131 @@
+import { describe, expect, it, vi } from 'vitest';
+import {
+    checkForUpdate,
+    formatUpdateMessage,
+    type AutoUpdateDeps,
+    type UpdateCheckResult,
+} from '../src/hooks/auto-update-checker.js';
+
+describe('checkForUpdate', () => {
+    const makeDeps = (overrides: Partial<AutoUpdateDeps> = {}): AutoUpdateDeps => ({
+        readCurrentVersion: () => '1.0.0',
+        fetchLatestVersion: async () => '1.0.0',
+        invalidateCache: () => true,
+        ...overrides,
+    });
+
+    it('returns needsUpdate=false when versions match', async () => {
+        const result = await checkForUpdate(makeDeps());
+        expect(result.needsUpdate).toBe(false);
+        expect(result.currentVersion).toBe('1.0.0');
+        expect(result.latestVersion).toBe('1.0.0');
+        expect(result.error).toBeUndefined();
+    });
+
+    it('returns needsUpdate=true when latest is newer', async () => {
+        const deps = makeDeps({
+            readCurrentVersion: () => '1.0.0',
+            fetchLatestVersion: async () => '2.0.0',
+        });
+        const result = await checkForUpdate(deps);
+        expect(result.needsUpdate).toBe(true);
+        expect(result.currentVersion).toBe('1.0.0');
+        expect(result.latestVersion).toBe('2.0.0');
+    });
+
+    it('calls invalidateCache when newer version detected', async () => {
+        const invalidate = vi.fn(() => true);
+        const deps = makeDeps({
+            readCurrentVersion: () => '1.0.0',
+            fetchLatestVersion: async () => '2.0.0',
+            invalidateCache: invalidate,
+        });
+        await checkForUpdate(deps);
+        expect(invalidate).toHaveBeenCalledOnce();
+    });
+
+    it('does not call invalidateCache when versions match', async () => {
+        const invalidate = vi.fn(() => true);
+        const deps = makeDeps({ invalidateCache: invalidate });
+        await checkForUpdate(deps);
+        expect(invalidate).not.toHaveBeenCalled();
+    });
+
+    it('does not call invalidateCache when current version unknown', async () => {
+        const invalidate = vi.fn(() => true);
+        const deps = makeDeps({
+            readCurrentVersion: () => null,
+            invalidateCache: invalidate,
+        });
+        const result = await checkForUpdate(deps);
+        expect(invalidate).not.toHaveBeenCalled();
+        expect(result.error).toContain('Could not determine current version');
+    });
+
+    it('returns error when latest version fetch fails', async () => {
+        const invalidate = vi.fn(() => true);
+        const deps = makeDeps({
+            fetchLatestVersion: async () => null,
+            invalidateCache: invalidate,
+        });
+        const result = await checkForUpdate(deps);
+        expect(invalidate).not.toHaveBeenCalled();
+        expect(result.error).toContain('Could not fetch latest version');
+    });
+
+    it('handles pre-release versions (does not match stable)', async () => {
+        const deps = makeDeps({
+            readCurrentVersion: () => '1.0.0-alpha.1',
+            fetchLatestVersion: async () => '1.0.0',
+        });
+        const result = await checkForUpdate(deps);
+        expect(result.needsUpdate).toBe(true);
+    });
+
+    it('returns needsUpdate=false when same pre-release version', async () => {
+        const deps = makeDeps({
+            readCurrentVersion: () => '1.0.0-beta.1',
+            fetchLatestVersion: async () => '1.0.0-beta.1',
+        });
+        const result = await checkForUpdate(deps);
+        expect(result.needsUpdate).toBe(false);
+    });
+});
+
+describe('formatUpdateMessage', () => {
+    it('returns warning variant when update is needed', () => {
+        const result: UpdateCheckResult = {
+            needsUpdate: true,
+            currentVersion: '1.0.0',
+            latestVersion: '2.0.0',
+        };
+        const msg = formatUpdateMessage(result);
+        expect(msg.variant).toBe('warning');
+        expect(msg.title).toContain('Update');
+        expect(msg.message).toContain('1.0.0');
+        expect(msg.message).toContain('2.0.0');
+        expect(msg.message).toContain('Restart');
+    });
+
+    it('returns info variant when no update needed', () => {
+        const result: UpdateCheckResult = {
+            needsUpdate: false,
+            currentVersion: '1.0.0',
+            latestVersion: '1.0.0',
+        };
+        const msg = formatUpdateMessage(result);
+        expect(msg.variant).toBe('info');
+        expect(msg.message).toBe('Up-to-date');
+    });
+
+    it('returns info variant when latest version unknown', () => {
+        const result: UpdateCheckResult = {
+            needsUpdate: false,
+            currentVersion: '1.0.0',
+            latestVersion: null,
+            error: 'Could not fetch latest version',
+        };
+        const msg = formatUpdateMessage(result);
+        expect(msg.variant).toBe('info');
+    });
+});
