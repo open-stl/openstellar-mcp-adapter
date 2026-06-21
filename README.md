@@ -91,6 +91,14 @@ MCP Server ──→ Adapter ──→ OpenCode Tool
 
 ---
 
+## Related Repositories
+
+* [openstellar-tool-search](https://github.com/open-stl/openstellar-tool-search)
+* [opencode-tool-search](https://github.com/M0Rf30/opencode-tool-search)
+* [opencode-mcp-adapter](https://github.com/CloudedQuartz/opencode-mcp-adapter)
+
+---
+
 ## License
 
 MIT © 2026 OpenStellar
