@@ -1,13 +1,24 @@
 import { log } from '../utils/logger.js';
+import { execFile as nodeExecFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync, existsSync, rmSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { env } from 'node:process';
+import { resolveRegistryUrl, buildDistTagsUrl, type ResolveEffects } from './npm-registry.js';
 
 const PACKAGE_NAME = '@openstellar/mcp-adapter';
-const NPM_REGISTRY_URL = `https://registry.npmjs.org/-/package/${encodeURIComponent(PACKAGE_NAME)}/dist-tags`;
 const NPM_FETCH_TIMEOUT = 5000;
+
+const execFileAsync = promisify(nodeExecFile);
+
+const resolveEffects: ResolveEffects = {
+    execFile: async (cmd, args, opts) => {
+        const { stdout } = await execFileAsync(cmd, args, opts);
+        return { stdout, stderr: '' };
+    },
+};
 
 declare const PACKAGE_VERSION: string;
 
@@ -49,11 +60,15 @@ export function getCurrentVersion(): string | null {
 }
 
 export async function getLatestVersion(): Promise<string | null> {
+    const { url: registryUrl } = await resolveRegistryUrl(resolveEffects);
+    const distTagsUrl = buildDistTagsUrl(registryUrl, PACKAGE_NAME);
+    if (!distTagsUrl) return null;
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), NPM_FETCH_TIMEOUT);
 
     try {
-        const response = await fetch(NPM_REGISTRY_URL, {
+        const response = await fetch(distTagsUrl, {
             signal: controller.signal,
             headers: { Accept: 'application/json' },
         });
