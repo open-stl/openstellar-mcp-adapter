@@ -5,7 +5,6 @@ import { readFileSync, existsSync, rmSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { env } from 'node:process';
 
-const PACKAGE_SCOPE = '@openstellar';
 const PACKAGE_NAME = '@openstellar/mcp-adapter';
 const NPM_REGISTRY_URL = `https://registry.npmjs.org/-/package/${encodeURIComponent(PACKAGE_NAME)}/dist-tags`;
 const NPM_FETCH_TIMEOUT = 5000;
@@ -95,17 +94,16 @@ export function invalidatePackageCache(): boolean {
         seen.add(root);
         if (!existsSync(root)) continue;
 
-        const scopeDir = join(root, PACKAGE_SCOPE);
-        if (existsSync(scopeDir)) {
+        const packageDir = join(root, PACKAGE_NAME);
+        if (existsSync(packageDir)) {
             try {
-                rmSync(scopeDir, { recursive: true, force: true });
-                log(`[auto-update] Removed cache scope dir: ${scopeDir}`);
+                rmSync(packageDir, { recursive: true, force: true });
+                log(`[auto-update] Removed cache package dir: ${packageDir}`);
                 removed = true;
             } catch (error) {
                 const msg = error instanceof Error ? error.message : String(error);
-                log(`[auto-update] Failed to remove ${scopeDir}: ${msg}`);
+                log(`[auto-update] Failed to remove ${packageDir}: ${msg}`);
             }
-            continue;
         }
 
         const specDir = join(root, `${PACKAGE_NAME}@latest`);
@@ -122,6 +120,17 @@ export function invalidatePackageCache(): boolean {
     }
 
     return removed;
+}
+
+export function isNewerVersion(latest: string, current: string): boolean {
+    // Compares stable version parts only (major.minor.patch); prerelease tags are ignored.
+    const parse = (v: string) => v.replace(/^v/, '').split(/[-+]/)[0].split('.').map(Number);
+    const [a, b] = [parse(latest), parse(current)];
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        if ((a[i] ?? 0) > (b[i] ?? 0)) return true;
+        if ((a[i] ?? 0) < (b[i] ?? 0)) return false;
+    }
+    return false;
 }
 
 export async function checkForUpdate(
@@ -151,7 +160,7 @@ export async function checkForUpdate(
         };
     }
 
-    if (currentVersion === latestVersion) {
+    if (!isNewerVersion(latestVersion, currentVersion)) {
         log(`[auto-update] Already up-to-date: ${currentVersion}`);
         return { needsUpdate: false, currentVersion, latestVersion };
     }

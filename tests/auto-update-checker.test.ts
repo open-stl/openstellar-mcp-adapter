@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     checkForUpdate,
     formatUpdateMessage,
+    isNewerVersion,
     type AutoUpdateDeps,
     type UpdateCheckResult,
 } from '../src/hooks/auto-update-checker.js';
@@ -73,10 +74,13 @@ describe('checkForUpdate', () => {
         expect(result.error).toContain('Could not fetch latest version');
     });
 
-    it('handles pre-release versions (does not match stable)', async () => {
+    it('handles pre-release versions as equal to their stable base', async () => {
+        // With a stable-only comparator, 1.0.0-alpha.1 and 1.0.0 have the same
+        // stable parts so no update is triggered. Use a higher stable version to
+        // test update detection with pre-release inputs.
         const deps = makeDeps({
             readCurrentVersion: () => '1.0.0-alpha.1',
-            fetchLatestVersion: async () => '1.0.0',
+            fetchLatestVersion: async () => '2.0.0',
         });
         const result = await checkForUpdate(deps);
         expect(result.needsUpdate).toBe(true);
@@ -127,5 +131,38 @@ describe('formatUpdateMessage', () => {
         };
         const msg = formatUpdateMessage(result);
         expect(msg.variant).toBe('info');
+    });
+});
+
+describe('isNewerVersion', () => {
+    it('returns false when versions are equal', () => {
+        expect(isNewerVersion('1.0.0', '1.0.0')).toBe(false);
+        expect(isNewerVersion('1.2.3', '1.2.3')).toBe(false);
+        // prerelease tags are ignored; only stable parts are compared
+        expect(isNewerVersion('1.0.0-alpha.1', '1.0.0-beta.1')).toBe(false);
+    });
+
+    it('returns true when latest is newer', () => {
+        expect(isNewerVersion('1.0.1', '1.0.0')).toBe(true);
+        expect(isNewerVersion('1.1.0', '1.0.1')).toBe(true);
+        expect(isNewerVersion('2.0.0', '1.9.9')).toBe(true);
+    });
+
+    it('returns false when downgrading (latest is older)', () => {
+        expect(isNewerVersion('1.0.0', '1.0.1')).toBe(false);
+        expect(isNewerVersion('1.0.1', '1.1.0')).toBe(false);
+        expect(isNewerVersion('1.9.9', '2.0.0')).toBe(false);
+    });
+
+    it('ignores prerelease tags and compares stable parts only', () => {
+        expect(isNewerVersion('1.0.0-alpha.1', '1.0.0')).toBe(false);
+        expect(isNewerVersion('1.0.0', '1.0.0-alpha.1')).toBe(false);
+        expect(isNewerVersion('2.0.0-beta.1', '1.0.0')).toBe(true);
+        expect(isNewerVersion('1.0.0-beta.1', '2.0.0')).toBe(false);
+    });
+
+    it('strips build metadata', () => {
+        expect(isNewerVersion('1.0.1+build.123', '1.0.0')).toBe(true);
+        expect(isNewerVersion('1.0.0+build.123', '1.0.0')).toBe(false);
     });
 });
