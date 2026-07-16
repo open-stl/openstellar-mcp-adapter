@@ -62,6 +62,8 @@ Add to `opencode.jsonc`:
 
 Restart OpenCode. Tools appear. Done.
 
+Local MCP servers keep stderr out of OpenCode's CLI by default while retaining a bounded startup trace for the debug log (`OPENSTELLAR_MCP_DEBUG=true`). Their stdout remains connected to the MCP JSON-RPC protocol. To opt into live diagnostics for a specific local server, add `"stderr": "inherit"`.
+
 ---
 
 ## Config
@@ -74,6 +76,7 @@ Restart OpenCode. Tools appear. Done.
 | `url`     | for `remote` | SSE endpoint                               |
 | `headers` | optional     | Auth tokens, etc.                          |
 | `env`     | optional     | Environment for child process              |
+| `stderr`  | optional     | Set to `"inherit"` for live child diagnostics; omitted by default (stderr is captured off-terminal) |
 | `timeout` | optional     | Per-tool timeout in ms (default: 60000)    |
 
 

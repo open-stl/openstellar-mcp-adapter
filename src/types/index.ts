@@ -1,9 +1,10 @@
-export type { 
-    McpServerConfig, 
-    McpAdapterOptions, 
+export type {
+    McpServerConfig,
+    McpAdapterOptions,
     McpConfigEntry,
-    LocalMcpServerConfig, 
-    RemoteMcpServerConfig, 
-    BaseServerConfig 
+    LocalMcpServerConfig,
+    LocalMcpServerStderr,
+    RemoteMcpServerConfig,
+    BaseServerConfig
 } from './config.js';
 export type { ServerConnection } from './connection.js';

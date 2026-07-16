@@ -25,6 +25,18 @@ describe('normalizeServerConfig', () => {
         ]);
     });
 
+    it('preserves the local stderr opt-in during normalization', () => {
+        const result = normalizeServerConfig({
+            mcp: {
+                local: { type: 'local', command: ['node', 'server.js'], stderr: 'inherit' },
+            },
+        });
+
+        expect(result).toEqual([
+            { name: 'local', type: 'local', command: ['node', 'server.js'], stderr: 'inherit' },
+        ]);
+    });
+
     it('filters out explicitly disabled servers (enabled: false)', () => {
         const config = {
             mcp: {

@@ -6,10 +6,14 @@ export interface BaseServerConfig {
     timeout?: number;
 }
 
+/** How a local MCP server's stderr is handled. Omission keeps it silent. */
+export type LocalMcpServerStderr = 'inherit';
+
 export interface LocalMcpServerConfig extends BaseServerConfig {
     type: 'local';
     command: string[];
     env?: Record<string, string>;
+    stderr?: LocalMcpServerStderr;
 }
 
 export interface RemoteMcpServerConfig extends BaseServerConfig {
