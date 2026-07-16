@@ -95,17 +95,16 @@ export function invalidatePackageCache(): boolean {
         seen.add(root);
         if (!existsSync(root)) continue;
 
-        const scopeDir = join(root, PACKAGE_SCOPE);
-        if (existsSync(scopeDir)) {
+        const packageDir = join(root, PACKAGE_NAME);
+        if (existsSync(packageDir)) {
             try {
-                rmSync(scopeDir, { recursive: true, force: true });
-                log(`[auto-update] Removed cache scope dir: ${scopeDir}`);
+                rmSync(packageDir, { recursive: true, force: true });
+                log(`[auto-update] Removed cache package dir: ${packageDir}`);
                 removed = true;
             } catch (error) {
                 const msg = error instanceof Error ? error.message : String(error);
-                log(`[auto-update] Failed to remove ${scopeDir}: ${msg}`);
+                log(`[auto-update] Failed to remove ${packageDir}: ${msg}`);
             }
-            continue;
         }
 
         const specDir = join(root, `${PACKAGE_NAME}@latest`);
@@ -122,6 +121,45 @@ export function invalidatePackageCache(): boolean {
     }
 
     return removed;
+}
+
+export function isNewerVersion(latest: string, current: string): boolean {
+    const parse = (v: string) => {
+        const hyphenIndex = v.indexOf('-');
+        let release: string;
+        let prerelease: string | null = null;
+        if (hyphenIndex !== -1) {
+            release = v.slice(0, hyphenIndex);
+            prerelease = v.slice(hyphenIndex + 1);
+        } else {
+            release = v;
+        }
+        const releaseParts = release.split('.').map(Number);
+        return { releaseParts, prerelease };
+    };
+
+    const vLatest = parse(latest);
+    const vCurrent = parse(current);
+
+    const maxLen = Math.max(vLatest.releaseParts.length, vCurrent.releaseParts.length);
+    for (let i = 0; i < maxLen; i++) {
+        const a = vLatest.releaseParts[i] ?? 0;
+        const b = vCurrent.releaseParts[i] ?? 0;
+        if (a > b) return true;
+        if (a < b) return false;
+    }
+
+    if (vLatest.prerelease === null && vCurrent.prerelease !== null) {
+        return true;
+    }
+    if (vLatest.prerelease !== null && vCurrent.prerelease === null) {
+        return false;
+    }
+    if (vLatest.prerelease !== null && vCurrent.prerelease !== null) {
+        return vLatest.prerelease > vCurrent.prerelease;
+    }
+
+    return false;
 }
 
 export async function checkForUpdate(
@@ -151,7 +189,7 @@ export async function checkForUpdate(
         };
     }
 
-    if (currentVersion === latestVersion) {
+    if (!isNewerVersion(latestVersion, currentVersion)) {
         log(`[auto-update] Already up-to-date: ${currentVersion}`);
         return { needsUpdate: false, currentVersion, latestVersion };
     }

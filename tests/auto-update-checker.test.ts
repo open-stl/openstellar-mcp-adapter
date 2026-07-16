@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     checkForUpdate,
     formatUpdateMessage,
+    isNewerVersion,
     type AutoUpdateDeps,
     type UpdateCheckResult,
 } from '../src/hooks/auto-update-checker.js';
@@ -127,5 +128,36 @@ describe('formatUpdateMessage', () => {
         };
         const msg = formatUpdateMessage(result);
         expect(msg.variant).toBe('info');
+    });
+});
+
+describe('isNewerVersion', () => {
+    it('returns false when versions are equal', () => {
+        expect(isNewerVersion('1.0.0', '1.0.0')).toBe(false);
+        expect(isNewerVersion('1.2.3', '1.2.3')).toBe(false);
+        expect(isNewerVersion('1.0.0-alpha.1', '1.0.0-alpha.1')).toBe(false);
+    });
+
+    it('returns true when latest is newer', () => {
+        expect(isNewerVersion('1.0.1', '1.0.0')).toBe(true);
+        expect(isNewerVersion('1.1.0', '1.0.1')).toBe(true);
+        expect(isNewerVersion('2.0.0', '1.9.9')).toBe(true);
+    });
+
+    it('returns false when downgrading (latest is older)', () => {
+        expect(isNewerVersion('1.0.0', '1.0.1')).toBe(false);
+        expect(isNewerVersion('1.0.1', '1.1.0')).toBe(false);
+        expect(isNewerVersion('1.9.9', '2.0.0')).toBe(false);
+    });
+
+    it('handles clean vs pre-release versions (clean release is newer)', () => {
+        expect(isNewerVersion('1.0.0', '1.0.0-alpha.1')).toBe(true);
+        expect(isNewerVersion('1.0.0-alpha.1', '1.0.0')).toBe(false);
+    });
+
+    it('compares pre-release differences lexicographically', () => {
+        expect(isNewerVersion('1.0.0-beta.1', '1.0.0-alpha.1')).toBe(true);
+        expect(isNewerVersion('1.0.0-alpha.1', '1.0.0-beta.1')).toBe(false);
+        expect(isNewerVersion('1.0.0-alpha.2', '1.0.0-alpha.1')).toBe(true);
     });
 });
