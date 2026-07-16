@@ -5,7 +5,6 @@ import { readFileSync, existsSync, rmSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { env } from 'node:process';
 
-const PACKAGE_SCOPE = '@openstellar';
 const PACKAGE_NAME = '@openstellar/mcp-adapter';
 const NPM_REGISTRY_URL = `https://registry.npmjs.org/-/package/${encodeURIComponent(PACKAGE_NAME)}/dist-tags`;
 const NPM_FETCH_TIMEOUT = 5000;
@@ -124,41 +123,13 @@ export function invalidatePackageCache(): boolean {
 }
 
 export function isNewerVersion(latest: string, current: string): boolean {
-    const parse = (v: string) => {
-        const hyphenIndex = v.indexOf('-');
-        let release: string;
-        let prerelease: string | null = null;
-        if (hyphenIndex !== -1) {
-            release = v.slice(0, hyphenIndex);
-            prerelease = v.slice(hyphenIndex + 1);
-        } else {
-            release = v;
-        }
-        const releaseParts = release.split('.').map(Number);
-        return { releaseParts, prerelease };
-    };
-
-    const vLatest = parse(latest);
-    const vCurrent = parse(current);
-
-    const maxLen = Math.max(vLatest.releaseParts.length, vCurrent.releaseParts.length);
-    for (let i = 0; i < maxLen; i++) {
-        const a = vLatest.releaseParts[i] ?? 0;
-        const b = vCurrent.releaseParts[i] ?? 0;
-        if (a > b) return true;
-        if (a < b) return false;
+    // Compares stable version parts only (major.minor.patch); prerelease tags are ignored.
+    const parse = (v: string) => v.replace(/^v/, '').split(/[-+]/)[0].split('.').map(Number);
+    const [a, b] = [parse(latest), parse(current)];
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        if ((a[i] ?? 0) > (b[i] ?? 0)) return true;
+        if ((a[i] ?? 0) < (b[i] ?? 0)) return false;
     }
-
-    if (vLatest.prerelease === null && vCurrent.prerelease !== null) {
-        return true;
-    }
-    if (vLatest.prerelease !== null && vCurrent.prerelease === null) {
-        return false;
-    }
-    if (vLatest.prerelease !== null && vCurrent.prerelease !== null) {
-        return vLatest.prerelease > vCurrent.prerelease;
-    }
-
     return false;
 }
 
