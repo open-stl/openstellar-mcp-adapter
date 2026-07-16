@@ -1,11 +1,12 @@
 export { McpAdapterPlugin } from './plugin.js';
-export type { 
-    McpServerConfig, 
-    McpAdapterOptions, 
+export type {
+    McpServerConfig,
+    McpAdapterOptions,
     McpConfigEntry,
-    LocalMcpServerConfig, 
-    RemoteMcpServerConfig, 
-    BaseServerConfig 
+    LocalMcpServerConfig,
+    LocalMcpServerStderr,
+    RemoteMcpServerConfig,
+    BaseServerConfig
 } from './types/index.js';
 
 import { McpAdapterPlugin } from './plugin.js';
