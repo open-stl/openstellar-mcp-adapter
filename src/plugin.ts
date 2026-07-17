@@ -33,7 +33,10 @@ export const McpAdapterPlugin: Plugin = async (_ctx, options?: PluginOptions) =>
             hasCheckedForUpdate = true;
 
             const result = await checkForUpdate();
-            if (result.needsUpdate && result.latestVersion) {
+            if (result.outcome !== 'up-to-date') {
+                log(`[auto-update] outcome=${result.outcome}${result.error ? ` error=${result.error}` : ''}`);
+            }
+            if (result.outcome === 'update-staged' && result.latestVersion) {
                 log(`[auto-update] Update available: ${result.currentVersion} -> ${result.latestVersion}. Cache invalidated.`);
                 const msg = formatUpdateMessage(result);
                 try {

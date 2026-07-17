@@ -1,34 +1,24 @@
-import { log } from '../utils/logger.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync, existsSync, rmSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { env } from 'node:process';
+import { gt, valid } from 'semver';
+import { resolveRegistryUrl, buildDistTagsUrl } from './npm-registry.js';
 
 const PACKAGE_NAME = '@openstellar/mcp-adapter';
-const NPM_REGISTRY_URL = `https://registry.npmjs.org/-/package/${encodeURIComponent(PACKAGE_NAME)}/dist-tags`;
 const NPM_FETCH_TIMEOUT = 5000;
 
-declare const PACKAGE_VERSION: string;
+export type UpdateCheckOutcome = 'up-to-date' | 'update-staged' | 'invalidation-failed' | 'check-failed';
 
 export interface UpdateCheckResult {
-    needsUpdate: boolean;
+    outcome: UpdateCheckOutcome;
     currentVersion: string | null;
     latestVersion: string | null;
     error?: string;
 }
 
-export interface AutoUpdateDeps {
-    readCurrentVersion: () => string | null;
-    fetchLatestVersion: () => Promise<string | null>;
-    invalidateCache: () => boolean;
-}
-
 export function getCurrentVersion(): string | null {
-    if (typeof PACKAGE_VERSION !== 'undefined' && PACKAGE_VERSION) {
-        return PACKAGE_VERSION;
-    }
-
     try {
         const __filename = fileURLToPath(import.meta.url);
         const dir = dirname(__filename);
@@ -44,27 +34,30 @@ export function getCurrentVersion(): string | null {
         }
     } catch {
     }
-
     return null;
 }
 
+async function defaultGetLatestVersionUrl(): Promise<string | null> {
+    const { url } = await resolveRegistryUrl();
+    return buildDistTagsUrl(url, PACKAGE_NAME);
+}
+
 export async function getLatestVersion(): Promise<string | null> {
+    const distTagsUrl = await defaultGetLatestVersionUrl();
+    if (!distTagsUrl) return null;
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), NPM_FETCH_TIMEOUT);
 
     try {
-        const response = await fetch(NPM_REGISTRY_URL, {
+        const response = await fetch(distTagsUrl, {
             signal: controller.signal,
             headers: { Accept: 'application/json' },
         });
-
         if (!response.ok) return null;
-
         const data = (await response.json()) as Record<string, string>;
         return data.latest ?? null;
-    } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        log(`[auto-update] Failed to fetch latest version: ${msg}`);
+    } catch {
         return null;
     } finally {
         clearTimeout(timeoutId);
@@ -76,112 +69,162 @@ function getPossibleCacheRoots(): string[] {
         join(homedir(), '.cache', 'opencode', 'packages'),
         join(homedir(), '.config', 'opencode', 'packages'),
     ];
-
     if (platform() === 'win32' && env.APPDATA) {
         cacheDirs.push(join(env.APPDATA, 'opencode', 'packages'));
     }
-
     return cacheDirs;
 }
 
-export function invalidatePackageCache(): boolean {
-    const cacheRoots = getPossibleCacheRoots();
+export function getPackageCacheTargets(cacheRoot: string): string[] {
+    return [join(cacheRoot, PACKAGE_NAME), join(cacheRoot, `${PACKAGE_NAME}@latest`)];
+}
+
+export interface CacheInvalidationEffects {
+    existsSync: typeof existsSync;
+    rmSync: typeof rmSync;
+}
+
+const defaultCacheInvalidationEffects: CacheInvalidationEffects = { existsSync, rmSync };
+
+export function invalidatePackageCache(
+    cacheRoots = getPossibleCacheRoots(),
+    effects: CacheInvalidationEffects = defaultCacheInvalidationEffects,
+): boolean {
     const seen = new Set<string>();
     let removed = false;
+    let removalFailed = false;
 
     for (const root of cacheRoots) {
         if (seen.has(root)) continue;
         seen.add(root);
-        if (!existsSync(root)) continue;
-
-        const packageDir = join(root, PACKAGE_NAME);
-        if (existsSync(packageDir)) {
+        for (const target of getPackageCacheTargets(root)) {
+            let exists: boolean;
             try {
-                rmSync(packageDir, { recursive: true, force: true });
-                log(`[auto-update] Removed cache package dir: ${packageDir}`);
-                removed = true;
-            } catch (error) {
-                const msg = error instanceof Error ? error.message : String(error);
-                log(`[auto-update] Failed to remove ${packageDir}: ${msg}`);
+                exists = effects.existsSync(target);
+            } catch {
+                removalFailed = true;
+                continue;
             }
-        }
-
-        const specDir = join(root, `${PACKAGE_NAME}@latest`);
-        if (existsSync(specDir)) {
+            if (!exists) continue;
             try {
-                rmSync(specDir, { recursive: true, force: true });
-                log(`[auto-update] Removed cache spec dir: ${specDir}`);
+                effects.rmSync(target, { recursive: true, force: true });
                 removed = true;
-            } catch (error) {
-                const msg = error instanceof Error ? error.message : String(error);
-                log(`[auto-update] Failed to remove ${specDir}: ${msg}`);
+            } catch {
+                removalFailed = true;
             }
         }
     }
-
-    return removed;
+    return removed && !removalFailed;
 }
 
 export function isNewerVersion(latest: string, current: string): boolean {
-    // Compares stable version parts only (major.minor.patch); prerelease tags are ignored.
-    const parse = (v: string) => v.replace(/^v/, '').split(/[-+]/)[0].split('.').map(Number);
-    const [a, b] = [parse(latest), parse(current)];
-    for (let i = 0; i < Math.max(a.length, b.length); i++) {
-        if ((a[i] ?? 0) > (b[i] ?? 0)) return true;
-        if ((a[i] ?? 0) < (b[i] ?? 0)) return false;
-    }
-    return false;
+    return valid(latest) !== null && valid(current) !== null && gt(latest, current);
 }
 
+export interface UpdateCheckEffects {
+    getCurrentVersion: () => string | null;
+    getLatestVersionUrl?: () => Promise<string | null>;
+    getLatestVersion: () => Promise<string | null>;
+    invalidatePackageCache: () => boolean;
+}
+
+const defaultUpdateCheckEffects: UpdateCheckEffects = {
+    getCurrentVersion,
+    getLatestVersionUrl: defaultGetLatestVersionUrl,
+    getLatestVersion,
+    invalidatePackageCache,
+};
+
 export async function checkForUpdate(
-    deps: AutoUpdateDeps = {
-        readCurrentVersion: getCurrentVersion,
-        fetchLatestVersion: getLatestVersion,
-        invalidateCache: invalidatePackageCache,
-    },
+    effects: UpdateCheckEffects = defaultUpdateCheckEffects,
 ): Promise<UpdateCheckResult> {
-    const currentVersion = deps.readCurrentVersion();
+    let currentVersion: string | null;
+    try {
+        currentVersion = effects.getCurrentVersion();
+    } catch (error) {
+        return { outcome: 'check-failed', currentVersion: null, latestVersion: null, error: error instanceof Error ? error.message : 'Could not determine current version' };
+    }
     if (!currentVersion) {
-        return {
-            needsUpdate: false,
-            currentVersion: null,
-            latestVersion: null,
-            error: 'Could not determine current version',
-        };
+        return { outcome: 'check-failed', currentVersion: null, latestVersion: null, error: 'Could not determine current version' };
     }
 
-    const latestVersion = await deps.fetchLatestVersion();
+    let latestVersion: string | null;
+    try {
+        if (effects.getLatestVersionUrl) {
+            const distTagsUrl = await effects.getLatestVersionUrl();
+            if (distTagsUrl) {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), NPM_FETCH_TIMEOUT);
+                try {
+                    const response = await fetch(distTagsUrl, {
+                        signal: controller.signal,
+                        headers: { Accept: 'application/json' },
+                    });
+                    if (response.ok) {
+                        const data = (await response.json()) as Record<string, string>;
+                        latestVersion = data.latest ?? null;
+                    } else {
+                        latestVersion = null;
+                    }
+                } finally {
+                    clearTimeout(timeoutId);
+                }
+            } else {
+                latestVersion = null;
+            }
+        } else {
+            latestVersion = await effects.getLatestVersion();
+        }
+    } catch {
+        latestVersion = null;
+    }
     if (!latestVersion) {
+        return { outcome: 'check-failed', currentVersion, latestVersion: null, error: 'Could not fetch latest version from npm' };
+    }
+    if (valid(currentVersion) === null || valid(latestVersion) === null) {
         return {
-            needsUpdate: false,
+            outcome: 'check-failed',
             currentVersion,
-            latestVersion: null,
-            error: 'Could not fetch latest version from npm',
+            latestVersion,
+            error: 'Could not compare package versions',
         };
     }
 
     if (!isNewerVersion(latestVersion, currentVersion)) {
-        log(`[auto-update] Already up-to-date: ${currentVersion}`);
-        return { needsUpdate: false, currentVersion, latestVersion };
+        return { outcome: 'up-to-date', currentVersion, latestVersion };
     }
 
-    log(`[auto-update] Update available: ${currentVersion} -> ${latestVersion}`);
-    deps.invalidateCache();
-
-    return { needsUpdate: true, currentVersion, latestVersion };
+    let invalidated: boolean;
+    try {
+        invalidated = effects.invalidatePackageCache();
+    } catch (error) {
+        return {
+            outcome: 'invalidation-failed',
+            currentVersion,
+            latestVersion,
+            error: error instanceof Error ? error.message : 'Could not invalidate the package cache',
+        };
+    }
+    if (!invalidated) {
+        return { outcome: 'invalidation-failed', currentVersion, latestVersion, error: 'Could not invalidate the package cache' };
+    }
+    return { outcome: 'update-staged', currentVersion, latestVersion };
 }
 
 export function formatUpdateMessage(result: UpdateCheckResult): {
     title: string;
     message: string;
-    variant: 'info' | 'success' | 'warning';
+    variant: 'info' | 'success' | 'warning' | 'error';
 } {
-    if (!result.needsUpdate || !result.latestVersion) {
-        return { title: 'MCP Adapter', message: 'Up-to-date', variant: 'info' };
+    if (result.outcome === 'update-staged' && result.latestVersion) {
+        return {
+            title: 'MCP Adapter Update',
+            message: `v${result.currentVersion} -> v${result.latestVersion}. Restart OpenCode to apply.`,
+            variant: 'warning',
+        };
     }
-    return {
-        title: 'MCP Adapter Update',
-        message: `v${result.currentVersion} -> v${result.latestVersion}. Restart OpenCode to apply.`,
-        variant: 'warning',
-    };
+    if (result.outcome === 'check-failed' || result.outcome === 'invalidation-failed') {
+        return { title: 'MCP Adapter Update Check', message: result.error ?? 'Update check failed.', variant: 'error' };
+    }
+    return { title: 'MCP Adapter', message: 'Up-to-date', variant: 'info' };
 }

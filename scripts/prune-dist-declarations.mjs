@@ -2,6 +2,7 @@ import { rm } from 'node:fs/promises';
 
 const declarationFolders = [
   'connection',
+  'hooks',
   'schema',
   'services',
   'tool',
