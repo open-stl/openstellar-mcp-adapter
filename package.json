@@ -1,6 +1,6 @@
 {
   "name": "@openstellar/mcp-adapter",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "OpenCode plugin that improves MCP compatibility with Gemini and enables tool hook interception",
   "type": "module",
   "main": "./dist/index.js",
