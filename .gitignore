@@ -39,3 +39,6 @@ opencode.jsonc.example
 /index.js
 /sidecar.js
 /loading.html
+
+# Deepwork
+.slim/deepwork/
